@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script src="signalr.min.js"></script>
+    <script src="jquery.min.js"></script>
+    <script src="bootstrap.min.js"></script>
+    <link rel="stylesheet" href="bootstrap.min.css">
+    </link>
+    <script>
+        $(document).ready(() => {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("https://localhost:7245/chathub")
+                .build();
+            async function start() {
+                try {
+                    await connection.start();
+                } catch (error) {
+                    setTimeout(() => start(), 2000);
+                }
+            }
+
+            connection.start();
+
+              $(".disabled").attr("disabled", "disabled");
+
+            $("body").on("click", ".users", function () {
+                $(".users").each((index, item) => {
+                    item.classList.remove("active")
+                });
+                $(this).addClass("active");
+            });
+
+            $("#btnJoin").click(() => {
+                const nickName = $("#txtNickName").val();
+                connection.invoke("GetNickName", nickName).catch((err) => {
+                    return console.error(err.toString());
+                   
+                });
+                 $(':disabled').removeAttr('disabled');
+                $(".disabled").removeClass("disabled");
+            });
+
+
+            connection.on("clientJoined", nickName => {
+                $("#clientStatusMessage").html(`${nickName} joined the room!`);
+                $("#clientStatusMessage").fadeIn(2000, () => {
+                    $("#clientStatusMessage").fadeOut(2000);
+
+                });
+            });
+
+            connection.on("clients", clients => {
+                $("#clientsId").html("");
+
+                $(clients).each((index, item) => {
+                    $("#clientsId").append(`<a class="list-group-item list-group-item-action users">${item.username}</a>`);
+                });
+            });
+
+            connection.on("ReceiveMessage", (message, nickName) => {
+
+
+                const _newLine = $(".messageLine").clone();
+                _newLine.removeClass("messageLine");
+                $(".messageLine").find("p").html(message);
+                $(".messageLine").find("h5")[0].innerHTML = nickName;
+                $(".messageLine").find("h5")[1].innerHTML = "";
+                $(".messages").append(_newLine);
+            });
+
+            $("#btnSend").click(() => {
+                const message = $("#txtMsg").val();
+                const clientName = $(".users.active").first().html();
+                connection.invoke("SendMessageAsync", message, clientName).catch((err) => {
+                    return console.error(err.toString());
+                });
+
+                const _newLine = $(".messageLine").clone();
+                _newLine.removeClass("messageLine");
+                $(".messageLine").find("p").html(message);
+                $(".messageLine").find("h5")[1].innerHTML = "me";
+                $(".messageLine").find("h5")[0].innerHTML = "";
+                $(".messages").append(_newLine);
+            });
+
+            $("#btnSendToGroup").click(() => {
+                const message = $("#txtMsg").val();
+                const group = $("#roomsId").val();
+                connection.invoke("SendMessageToGroupAsync", message, group).catch((err) => {
+                    return console.error(err.toString());
+                });
+
+                const _newLine = $(".messageLine").clone();
+                _newLine.removeClass("messageLine");
+                $(".messageLine").find("p").html(message);
+                $(".messageLine").find("h5")[1].innerHTML = "me";
+                $(".messageLine").find("h5")[0].innerHTML = "";
+                $(".messages").append(_newLine);
+            });
+
+            $("#btnCreateRoom").click(() => {
+                const roomName = $("#txtRoomName").val();
+                connection.invoke("AddGroup", roomName).catch((err) => {
+                    return console.error(err.toString());
+                });
+            });
+
+            connection.on("groups", groups => {
+                //remove before load
+                $("#roomsId").empty();
+                $(groups).each((index, item) => {
+                    $("#roomsId").append(`<option value="${item.groupName}">${item.groupName}</option>`);
+                });
+            });
+
+            $("#btnJoinGroups").click(() => {
+                let groupNames=[];
+                const selectedRooms = $("#roomsId").val();
+                
+                console.log(selectedRooms);
+
+                connection.invoke("AddClientToGroupAsync", selectedRooms).catch((err) => {
+                        return console.error(err.toString());
+                });
+            });
+
+            $("#roomsId").change(function () {
+                let groupName=$(this).val();
+                console.log(groupName);
+                connection.invoke("GetClientToGroupAsync", groupName[0]).catch((err) => {
+                        return console.error(err.toString());
+                });
+            })
+        });
+    </script>
+</head>
+
+<body>
+    <br><br>
+    <div class="row">
+        <div class="col-md-1"></div>
+        <div class="class col-md-10">
+            <div class="row">
+                <!--Left Menu-->
+
+                <div class="col-md-3">
+                    <!--Room-->
+
+                    <input type="text" placeholder="room name" id="txtRoomName"class="form-control form-control-lg disabled">
+                    <br>
+                    <button class="btn btn-primary rightButton disabled" id="btnCreateRoom">create room</button>
+                    <br><br>
+                    <select name="" size="5" class="form-select disabled rooms" id="roomsId">
+                        <option value="-1">Rooms</option>
+                    </select>
+                    <br>
+                    <button class="btn btn-info rightButton disabled" id="btnJoinGroups">join selected rooms</button>
+                    <br><br><br>
+                    <!--Clients-->
+                    <div class="list-group clients" id="">
+                        <a class="list-group-item list-group-item-action users active">all</a>
+                        <div id="clientsId">
+
+                        </div>
+
+                    </div>
+                    <!--Clients-->
+                </div>
+                <div class="col-md-6">
+                    <div class="alert alert-success" id="clientStatusMessage" style="display:none">
+                        <h4 class="alert-heading">Welcome to the chat!</h4>
+                        <p>you can join to the room or create new room</p>
+                        <hr>
+                        <p class="mb-0">you can send message to all or selected users</p>
+                    </div>
+                    <!--Messaging-->
+                    <textarea class="form-control" style="margin-top:5px" placeholder="type message" id="txtMsg"
+                        rows="3"></textarea>
+                        <br>
+                    <button type="button" class="btn btn-primary rigthButton" id="btnSend">send</button>
+                    <button type="button" class="btn btn-warning rigthButton" id="btnSendToGroup">send to group</button>
+                    <br><br><br>
+                    <div class="list-group messages">
+                        <a class="list-group-item list-group-item-action messageLine">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1"></h5>
+                                <h5 class="mb-2"></h5>
+                            </div>
+                            <p class="mb-1"></p>
+                        </a>
+                    </div>
+                    <!--Messaging-->
+                </div>
+                <div class="col-md-3">
+                    <input type="text" placeholder="nick name" class="form-control form-control-lg" id="txtNickName">
+                    <button type="button" class="btn btn-success leftButton mt-1" id="btnJoin">join</button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-1"></div>
+    </div>
+</body>
+
+</html>
